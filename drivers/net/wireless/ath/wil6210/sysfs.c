@@ -270,7 +270,8 @@ static DEVICE_ATTR(fst_link_loss, 0644,
 
 static struct attribute *wil6210_sysfs_entries[] = {
 	&dev_attr_ftm_txrx_offset.attr,
-
+	&dev_attr_thermal_throttling.attr,
+	&dev_attr_fst_link_loss.attr,
 	NULL
 };
 

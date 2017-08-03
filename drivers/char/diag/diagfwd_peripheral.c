@@ -360,9 +360,9 @@ static void diagfwd_data_read_untag_done(struct diagfwd_info *fwd_info,
 	}
 	peripheral = fwd_info->peripheral;
 
-	if (driver->feature[peripheral].encode_hdlc &&
-		driver->feature[peripheral].untag_header &&
-		driver->peripheral_untag[peripheral]) {
+	if (driver->feature[fwd_info->peripheral].encode_hdlc &&
+		driver->feature[fwd_info->peripheral].untag_header &&
+		driver->peripheral_untag[fwd_info->peripheral]) {
 		mutex_lock(&driver->diagfwd_untag_mutex);
 		temp_buf_cpd = buf;
 		temp_buf_main = buf;
@@ -1269,17 +1269,13 @@ void diagfwd_write_done(uint8_t peripheral, uint8_t type, int ctxt)
 		return;
 
 	fwd_info = &peripheral_info[type][peripheral];
-
 	if (ctxt == 1 && fwd_info->buf_1) {
-		/* Buffer 1 for core PD is freed */
 		atomic_set(&fwd_info->buf_1->in_busy, 0);
-		driver->cpd_len_1[peripheral] = 0;
+		driver->cpd_len_1 = 0;
 	} else if (ctxt == 2 && fwd_info->buf_2) {
-		/* Buffer 2 for core PD is freed */
 		atomic_set(&fwd_info->buf_2->in_busy, 0);
-		driver->cpd_len_2[peripheral] = 0;
+		driver->cpd_len_2 = 0;
 	} else if (ctxt == 3 && fwd_info->buf_upd_1_a) {
-		/* Buffer 1 for user pd 1  is freed */
 		atomic_set(&fwd_info->buf_upd_1_a->in_busy, 0);
 
 		if (peripheral == PERIPHERAL_LPASS) {
@@ -1473,8 +1469,7 @@ static void diagfwd_queue_read(struct diagfwd_info *fwd_info)
 
 void diagfwd_buffers_init(struct diagfwd_info *fwd_info)
 {
-	struct diagfwd_buf_t *temp_fwd_buf;
-	unsigned char *temp_char_buf;
+	unsigned char *temp_buf = NULL;
 
 	if (!fwd_info)
 		return;
@@ -1545,11 +1540,11 @@ void diagfwd_buffers_init(struct diagfwd_info *fwd_info)
 					kzalloc(PERIPHERAL_BUF_SZ +
 						APF_DIAG_PADDING,
 					    GFP_KERNEL);
-				temp_char_buf = fwd_info->buf_upd_1_a->data;
-				if (ZERO_OR_NULL_PTR(temp_char_buf))
+				temp_buf = fwd_info->buf_upd_1_a->data;
+				if (ZERO_OR_NULL_PTR(temp_buf))
 					goto err;
 				fwd_info->buf_upd_1_a->len = PERIPHERAL_BUF_SZ;
-				kmemleak_not_leak(temp_char_buf);
+				kmemleak_not_leak(temp_buf);
 				fwd_info->buf_upd_1_a->ctxt = SET_BUF_CTXT(
 					fwd_info->peripheral,
 					fwd_info->type, 3);
@@ -1570,13 +1565,12 @@ void diagfwd_buffers_init(struct diagfwd_info *fwd_info)
 					kzalloc(PERIPHERAL_BUF_SZ +
 						APF_DIAG_PADDING,
 						GFP_KERNEL);
-				temp_char_buf =
-					fwd_info->buf_upd_1_b->data;
-				if (ZERO_OR_NULL_PTR(temp_char_buf))
+				temp_buf = fwd_info->buf_upd_1_b->data;
+				if (ZERO_OR_NULL_PTR(temp_buf))
 					goto err;
 				fwd_info->buf_upd_1_b->len =
 					PERIPHERAL_BUF_SZ;
-				kmemleak_not_leak(temp_char_buf);
+				kmemleak_not_leak(temp_buf);
 				fwd_info->buf_upd_1_b->ctxt = SET_BUF_CTXT(
 					fwd_info->peripheral,
 					fwd_info->type, 4);
@@ -1649,13 +1643,12 @@ void diagfwd_buffers_init(struct diagfwd_info *fwd_info)
 					kzalloc(PERIPHERAL_BUF_SZ +
 						APF_DIAG_PADDING,
 						GFP_KERNEL);
-				temp_char_buf =
-					fwd_info->buf_1->data_raw;
-				if (ZERO_OR_NULL_PTR(temp_char_buf))
+				temp_buf = fwd_info->buf_1->data_raw;
+				if (ZERO_OR_NULL_PTR(temp_buf))
 					goto err;
 				fwd_info->buf_1->len_raw =
 					PERIPHERAL_BUF_SZ;
-				kmemleak_not_leak(temp_char_buf);
+				kmemleak_not_leak(temp_buf);
 			}
 
 			if (!fwd_info->buf_2->data_raw) {
@@ -1663,13 +1656,12 @@ void diagfwd_buffers_init(struct diagfwd_info *fwd_info)
 					kzalloc(PERIPHERAL_BUF_SZ +
 						APF_DIAG_PADDING,
 						GFP_KERNEL);
-				temp_char_buf =
-					fwd_info->buf_2->data_raw;
-				if (ZERO_OR_NULL_PTR(temp_char_buf))
+				temp_buf = fwd_info->buf_2->data_raw;
+				if (ZERO_OR_NULL_PTR(temp_buf))
 					goto err;
 				fwd_info->buf_2->len_raw =
 					PERIPHERAL_BUF_SZ;
-				kmemleak_not_leak(temp_char_buf);
+				kmemleak_not_leak(temp_buf);
 			}
 
 			if (driver->feature[fwd_info->peripheral].
@@ -1680,13 +1672,13 @@ void diagfwd_buffers_init(struct diagfwd_info *fwd_info)
 						kzalloc(PERIPHERAL_BUF_SZ +
 							APF_DIAG_PADDING,
 							GFP_KERNEL);
-					temp_char_buf =
+					temp_buf =
 						fwd_info->buf_upd_1_a->data_raw;
-					if (ZERO_OR_NULL_PTR(temp_char_buf))
+					if (ZERO_OR_NULL_PTR(temp_buf))
 						goto err;
 					fwd_info->buf_upd_1_a->len_raw =
 						PERIPHERAL_BUF_SZ;
-					kmemleak_not_leak(temp_char_buf);
+					kmemleak_not_leak(temp_buf);
 				}
 
 				if (fwd_info->buf_upd_1_b &&
@@ -1695,41 +1687,13 @@ void diagfwd_buffers_init(struct diagfwd_info *fwd_info)
 						kzalloc(PERIPHERAL_BUF_SZ +
 							APF_DIAG_PADDING,
 							GFP_KERNEL);
-					temp_char_buf =
+					temp_buf =
 						fwd_info->buf_upd_1_b->data_raw;
-					if (ZERO_OR_NULL_PTR(temp_char_buf))
+					if (ZERO_OR_NULL_PTR(temp_buf))
 						goto err;
 					fwd_info->buf_upd_1_b->len_raw =
 						PERIPHERAL_BUF_SZ;
-					kmemleak_not_leak(temp_char_buf);
-				}
-				if (fwd_info->peripheral == PERIPHERAL_LPASS
-					&& !fwd_info->buf_upd_2_a->data_raw) {
-					fwd_info->buf_upd_2_a->data_raw =
-						kzalloc(PERIPHERAL_BUF_SZ +
-							APF_DIAG_PADDING,
-							GFP_KERNEL);
-					temp_char_buf =
-						fwd_info->buf_upd_2_a->data_raw;
-					if (ZERO_OR_NULL_PTR(temp_char_buf))
-						goto err;
-					fwd_info->buf_upd_2_a->len_raw =
-						PERIPHERAL_BUF_SZ;
-					kmemleak_not_leak(temp_char_buf);
-				}
-				if (fwd_info->peripheral == PERIPHERAL_LPASS
-					&& !fwd_info->buf_upd_2_b->data_raw) {
-					fwd_info->buf_upd_2_b->data_raw =
-						kzalloc(PERIPHERAL_BUF_SZ +
-							APF_DIAG_PADDING,
-							GFP_KERNEL);
-					temp_char_buf =
-						fwd_info->buf_upd_2_b->data_raw;
-					if (ZERO_OR_NULL_PTR(temp_char_buf))
-						goto err;
-					fwd_info->buf_upd_2_b->len_raw =
-						PERIPHERAL_BUF_SZ;
-					kmemleak_not_leak(temp_char_buf);
+					kmemleak_not_leak(temp_buf);
 				}
 			}
 		}

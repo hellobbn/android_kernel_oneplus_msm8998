@@ -2083,6 +2083,7 @@ static void arm_iommu_sync_single_for_device(struct device *dev,
 
 	if (!iova_coherent)
 		__dma_page_cpu_to_dev(page, offset, size, dir);
+
 }
 
 static int arm_iommu_dma_supported(struct device *dev, u64 mask)
