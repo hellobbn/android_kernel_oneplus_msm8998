@@ -2567,7 +2567,6 @@ reset:
 	common->running = 0;
 	if (!new_fsg || rc) {
 		return rc;
-	}
 
 	common->fsg = new_fsg;
 	fsg = common->fsg;
