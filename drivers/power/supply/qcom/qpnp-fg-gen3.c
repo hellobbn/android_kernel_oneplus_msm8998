@@ -1123,6 +1123,25 @@ static void fg_notify_charger(struct fg_chip *chip)
 	fg_dbg(chip, FG_STATUS, "Notified charger on float voltage and FCC\n");
 }
 
+static int fg_delta_bsoc_irq_en_cb(struct votable *votable, void *data,
+					int enable, const char *client)
+{
+	struct fg_chip *chip = data;
+
+	if (!chip->irqs[BSOC_DELTA_IRQ].irq)
+		return 0;
+
+	if (enable) {
+		enable_irq(chip->irqs[BSOC_DELTA_IRQ].irq);
+		enable_irq_wake(chip->irqs[BSOC_DELTA_IRQ].irq);
+	} else {
+		disable_irq_wake(chip->irqs[BSOC_DELTA_IRQ].irq);
+		disable_irq(chip->irqs[BSOC_DELTA_IRQ].irq);
+	}
+
+	return 0;
+}
+
 static int fg_awake_cb(struct votable *votable, void *data, int awake,
 			const char *client)
 {
@@ -2281,6 +2300,35 @@ static int fg_get_cycle_count(struct fg_chip *chip)
 	return count;
 }
 
+static int fg_bp_params_config(struct fg_chip *chip)
+{
+	int rc = 0;
+	u8 buf;
+
+	/* This SRAM register is only present in v2.0 and above */
+	if (!(chip->wa_flags & PMI8998_V1_REV_WA) &&
+					chip->bp.float_volt_uv > 0) {
+		fg_encode(chip->sp, FG_SRAM_FLOAT_VOLT,
+			chip->bp.float_volt_uv / 1000, &buf);
+		rc = fg_sram_write(chip, chip->sp[FG_SRAM_FLOAT_VOLT].addr_word,
+			chip->sp[FG_SRAM_FLOAT_VOLT].addr_byte, &buf,
+			chip->sp[FG_SRAM_FLOAT_VOLT].len, FG_IMA_DEFAULT);
+		if (rc < 0) {
+			pr_err("Error in writing float_volt, rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+	if (chip->bp.vbatt_full_mv > 0) {
+		rc = fg_set_constant_chg_voltage(chip,
+				chip->bp.vbatt_full_mv * 1000);
+		if (rc < 0)
+			return rc;
+	}
+
+	return rc;
+}
+
 #define PROFILE_LOAD_BIT	BIT(0)
 #define BOOTLOADER_LOAD_BIT	BIT(1)
 #define BOOTLOADER_RESTART_BIT	BIT(2)
@@ -2301,6 +2349,17 @@ static bool is_profile_load_required(struct fg_chip *chip)
 	/* Check if integrity bit is set */
 	if (val & PROFILE_LOAD_BIT) {
 		fg_dbg(chip, FG_STATUS, "Battery profile integrity bit is set\n");
+
+		/* Whitelist the values */
+		val &= ~PROFILE_LOAD_BIT;
+		if (val != HLOS_RESTART_BIT && val != BOOTLOADER_LOAD_BIT &&
+			val != (BOOTLOADER_LOAD_BIT | BOOTLOADER_RESTART_BIT)) {
+			val |= PROFILE_LOAD_BIT;
+			pr_warn("Garbage value in profile integrity word: 0x%x\n",
+				val);
+			return true;
+		}
+
 		rc = fg_sram_read(chip, PROFILE_LOAD_WORD, PROFILE_LOAD_OFFSET,
 				buf, PROFILE_COMP_LEN, FG_IMA_DEFAULT);
 		if (rc < 0) {
@@ -2448,6 +2507,11 @@ static void profile_load_work(struct work_struct *work)
 	}
 
 done:
+	rc = fg_bp_params_config(chip);
+	if (rc < 0)
+		pr_err("Error in configuring battery profile params, rc:%d\n",
+			rc);
+
 	rc = fg_sram_read(chip, NOM_CAP_WORD, NOM_CAP_OFFSET, buf, 2,
 			FG_IMA_DEFAULT);
 	if (rc < 0) {
@@ -3157,27 +3221,6 @@ static int fg_hw_init(struct fg_chip *chip)
 	if (rc < 0) {
 		pr_err("Error in writing empty_volt, rc=%d\n", rc);
 		return rc;
-	}
-
-	/* This SRAM register is only present in v2.0 and above */
-	if (!(chip->wa_flags & PMI8998_V1_REV_WA) &&
-					chip->bp.float_volt_uv > 0) {
-		fg_encode(chip->sp, FG_SRAM_FLOAT_VOLT,
-			chip->bp.float_volt_uv / 1000, buf);
-		rc = fg_sram_write(chip, chip->sp[FG_SRAM_FLOAT_VOLT].addr_word,
-			chip->sp[FG_SRAM_FLOAT_VOLT].addr_byte, buf,
-			chip->sp[FG_SRAM_FLOAT_VOLT].len, FG_IMA_DEFAULT);
-		if (rc < 0) {
-			pr_err("Error in writing float_volt, rc=%d\n", rc);
-			return rc;
-		}
-	}
-
-	if (chip->bp.vbatt_full_mv > 0) {
-		rc = fg_set_constant_chg_voltage(chip,
-				chip->bp.vbatt_full_mv * 1000);
-		if (rc < 0)
-			return rc;
 	}
 
 	fg_encode(chip->sp, FG_SRAM_CHG_TERM_CURR, chip->dt.chg_term_curr_ma,
@@ -4277,6 +4320,9 @@ static void fg_cleanup(struct fg_chip *chip)
 	if (chip->awake_votable)
 		destroy_votable(chip->awake_votable);
 
+	if (chip->delta_bsoc_irq_en_votable)
+		destroy_votable(chip->delta_bsoc_irq_en_votable);
+
 	if (chip->batt_id_chan)
 		iio_channel_release(chip->batt_id_chan);
 
@@ -4359,7 +4405,15 @@ static int fg_gen3_probe(struct platform_device *pdev)
 					chip);
 	if (IS_ERR(chip->awake_votable)) {
 		rc = PTR_ERR(chip->awake_votable);
-		return rc;
+		goto exit;
+	}
+
+	chip->delta_bsoc_irq_en_votable = create_votable("FG_DELTA_BSOC_IRQ",
+						VOTE_SET_ANY,
+						fg_delta_bsoc_irq_en_cb, chip);
+	if (IS_ERR(chip->delta_bsoc_irq_en_votable)) {
+		rc = PTR_ERR(chip->delta_bsoc_irq_en_votable);
+		goto exit;
 	}
 
 	rc = fg_parse_dt(chip);
@@ -4386,7 +4440,7 @@ static int fg_gen3_probe(struct platform_device *pdev)
 	rc = fg_get_batt_id(chip);
 	if (rc < 0) {
 		pr_err("Error in getting battery id, rc:%d\n", rc);
-		return rc;
+		goto exit;
 	}
 
 	rc = fg_get_batt_profile(chip);

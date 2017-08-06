@@ -56,6 +56,7 @@ enum print_reason {
 #define USB_PSY_VOTER			"USB_PSY_VOTER"
 #define PL_TAPER_WORK_RUNNING_VOTER	"PL_TAPER_WORK_RUNNING_VOTER"
 #define PL_INDIRECT_VOTER		"PL_INDIRECT_VOTER"
+#define PL_QNOVO_VOTER			"PL_QNOVO_VOTER"
 #define USBIN_I_VOTER			"USBIN_I_VOTER"
 #define USBIN_V_VOTER			"USBIN_V_VOTER"
 #define CHG_STATE_VOTER			"CHG_STATE_VOTER"
@@ -69,6 +70,7 @@ enum print_reason {
 #define VBUS_CC_SHORT_VOTER		"VBUS_CC_SHORT_VOTER"
 #define PD_INACTIVE_VOTER		"PD_INACTIVE_VOTER"
 #define BOOST_BACK_VOTER		"BOOST_BACK_VOTER"
+#define USBIN_USBIN_BOOST_VOTER		"USBIN_USBIN_BOOST_VOTER"
 #define HVDCP_INDIRECT_VOTER		"HVDCP_INDIRECT_VOTER"
 #define MICRO_USB_VOTER			"MICRO_USB_VOTER"
 #define DEBUG_BOARD_VOTER		"DEBUG_BOARD_VOTER"
@@ -415,9 +417,11 @@ struct smb_charger {
 	/* extcon for VBUS / ID notification to USB for uUSB */
 	struct extcon_dev	*extcon;
 
+	/* battery profile */
+	int			batt_profile_fcc_ua;
+	int			batt_profile_fv_uv;
+
 	/* qnovo */
-	int			qnovo_fcc_ua;
-	int			qnovo_fv_uv;
 	int			usb_icl_delta_ua;
 	int			pulse_cnt;
 };
@@ -601,6 +605,7 @@ int smblib_icl_override(struct smb_charger *chg, bool override);
 int smblib_dp_dm(struct smb_charger *chg, int val);
 int smblib_rerun_aicl(struct smb_charger *chg);
 int smblib_set_icl_current(struct smb_charger *chg, int icl_ua);
+int smblib_get_icl_current(struct smb_charger *chg, int *icl_ua);
 int smblib_get_charge_current(struct smb_charger *chg, int *total_current_ua);
 
 int smblib_init(struct smb_charger *chg);
