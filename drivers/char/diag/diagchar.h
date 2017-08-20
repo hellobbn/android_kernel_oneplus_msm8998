@@ -478,6 +478,7 @@ struct diag_feature_t {
 	uint8_t encode_hdlc;
 	uint8_t untag_header;
 	uint8_t peripheral_buffering;
+	uint8_t pd_buffering;
 	uint8_t mask_centralization;
 	uint8_t stm_support;
 	uint8_t sockets_enabled;
@@ -509,6 +510,7 @@ struct diagchar_dev {
 	int supports_separate_cmdrsp;
 	int supports_apps_hdlc_encoding;
 	int supports_apps_header_untagging;
+	int supports_pd_buffering;
 	int peripheral_untag[NUM_PERIPHERALS];
 	int supports_sockets;
 	/* The state requested in the STM command */
@@ -561,8 +563,8 @@ struct diagchar_dev {
 	struct diagfwd_info *diagfwd_cmd[NUM_PERIPHERALS];
 	struct diagfwd_info *diagfwd_dci_cmd[NUM_PERIPHERALS];
 	struct diag_feature_t feature[NUM_PERIPHERALS];
-	struct diag_buffering_mode_t buffering_mode[NUM_PERIPHERALS];
-	uint8_t buffering_flag[NUM_PERIPHERALS];
+	struct diag_buffering_mode_t buffering_mode[NUM_MD_SESSIONS];
+	uint8_t buffering_flag[NUM_MD_SESSIONS];
 	struct mutex mode_lock;
 	unsigned char *user_space_data_buf;
 	uint8_t user_space_data_busy;
@@ -627,8 +629,10 @@ struct diagchar_dev {
 	struct diag_mask_info *event_mask;
 	struct diag_mask_info *build_time_mask;
 	uint8_t msg_mask_tbl_count;
+	uint8_t bt_msg_mask_tbl_count;
 	uint16_t event_mask_size;
 	uint16_t last_event_id;
+	struct mutex msg_mask_lock;
 	/* Variables for Mask Centralization */
 	uint16_t num_event_id[NUM_PERIPHERALS];
 	uint32_t num_equip_id[NUM_PERIPHERALS];

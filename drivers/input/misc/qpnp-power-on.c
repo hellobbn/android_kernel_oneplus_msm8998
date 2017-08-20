@@ -2587,6 +2587,9 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 	pon->kpdpwr_dbc_enable = of_property_read_bool(pon->pdev->dev.of_node,
 					"qcom,kpdpwr-sw-debounce");
 
+	pon->kpdpwr_dbc_enable = of_property_read_bool(pon->pdev->dev.of_node,
+					"qcom,kpdpwr-sw-debounce");
+
 	rc = of_property_read_u32(pon->pdev->dev.of_node,
 				"qcom,warm-reset-poweroff-type",
 				&pon->warm_reset_poff_type);

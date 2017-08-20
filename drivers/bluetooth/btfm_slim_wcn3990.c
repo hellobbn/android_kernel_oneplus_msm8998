@@ -109,7 +109,8 @@ int btfm_slim_chrk_enable_port(struct btfmslim *btfmslim, uint8_t port_num,
 	if (!enable)
 		goto enable_disable_txport;
 
-	/* Multiple Channel Setting - only for FM Tx */
+	/* txport */
+	/* Multiple Channel Setting */
 	if (is_fm_port(port_num)) {
 		reg_val = (0x1 << CHRK_SB_PGD_PORT_TX1_FM) |
 				(0x1 << CHRK_SB_PGD_PORT_TX2_FM);
